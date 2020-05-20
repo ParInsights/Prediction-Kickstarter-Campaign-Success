@@ -1,0 +1,615 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+load libraries
+```{r include=FALSE}
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(cluster)
+library(rattle)
+library(mclust)
+library(lubridate)    # Date/ Time manipulation
+library(magrittr)     # Pipe operator
+library(corrplot)     # Correlation function
+library(formattable)  # Data Preview section
+library(knitr)        # Data Preview section
+library(broom)        # Glance function
+library(boot)         # Bootstrapping function
+library(glmnet)       # Cross validation function
+library(mgcv)         # GAM function
+library(verification) # ROC plots
+library(rpart)        # Classification Tree
+library(rpart.plot)   # Classification Tree plot
+library(caret)        # Confusion Matrix function
+library(randomForest) # Random Forest function
+library(tidyr)
+library(caTools)
+library(InformationValue)
+library(ROCR)
+library(e1071)
+library(ggpubr)
+library(pacman)
+devtools::install_github("https://github.com/araastat/reprtree")
+```
+
+Load Data
+```{r}
+data_path=file.choose()
+data=read.csv(data_path)
+str(data)
+View(data)
+sum(!complete.cases(data))
+summary(data)
+#look at null values
+is.na(data) # returns TRUE of x is missing
+data[!complete.cases(data),]
+
+data$main_category <- as.factor(data$main_category)
+data$sub_category <- as.factor(data$sub_category)
+#data$location <- as.factor(data$location)
+data$status <- as.factor(data$status)
+
+data <- data[complete.cases(data),]
+
+
+
+```
+
+Exploratory data analysis
+
+ What is the average of the pledged?
+  
+```{r}
+mean(data$usd_pledged)
+```
+
+
+Scaling fp data ERROR
+```{r}
+#data<-data.frame(scale(fp,center = T,scale = T))
+
+```
+
+
+
+3 3. Is duration normaly distributed?
+```{r}
+
+qqnorm(data$duration)
+qqline(data$duration)
+
+
+
+ggplot(data, aes(sample = duration, colour = factor(duration))) +
+  stat_qq() +
+  stat_qq_line()
+
+```
+
+
+
+Create copy of data called ks
+
+```{r}
+ks <- data
+ks$id <- as.character(ks$id)
+ks$name <- as.character(ks$name)
+ks$deadline <- as.Date(ks$deadline)
+ks$launched_at <- as.Date(ks$launched_at)
+
+##2.Re-ordering the dataset variables to a meaningful order
+ks <- ks[, c(1:4, 12, 8, 6, 5, 7, 9, 11, 13:15, 10)]
+#View(ks) #for verification
+
+```
+
+3. Data sub-setting:
+
+```{r}
+ggplot(ks, aes(status)) +
+  geom_bar(fill="#1380A1") +
+  geom_hline(yintercept = 0, size =1, color = "black")+
+  ylab("# of Projects") + xlab("Final status") +
+  ggtitle("Final Status of the Kickstarter projects")+
+  bbc_style()
+
+summary(ks$status)
+```
+
+##4. Check for duplicates:
+  
+  
+
+##5. Check for missing values:
+
+```{r}
+sum(is.na(ks)) 
+colSums(is.na(ks))
+colnames(ks)
+```
+  
+6. Feature Creation
+The dataset contains many categorical variables with multiple levels. 
+Many of those levels have too few observations within the level. 
+In order to reduce the number of parameters
+in the predictive analysis, such levels were consolidated.
+
+
+a. Country:
+removed the requirement of "state" and focused on country. 
+We will keep a separate dataset with states within each country for further analysis 
+```{r}
+
+ks.proj<-ks[,c(-11, -15)]
+plot(ks.proj$country)
+
+ggplot(ks.proj, aes(x=currency)) +
+  geom_bar() +
+  geom_bar(fill="#1380A1")+
+  ggtitle("Goal Currency")+
+  bbc_style()
+
+#View(ks.proj) #for verification
+
+ks.proj$country <- as.character(ks.proj$country)
+ks.proj$country <- as.factor(ks.proj$country)
+# Reducing levels in Country
+ks.proj$country <- as.character(ks.proj$country)
+ks.proj$country[ks.proj$country %in% c("JP", "LU", "AT", "HK", "SG", "BE", "CH", "IE", "NO", "DK", 
+                                       "MX", "NZ", "SE", "ES", "IT", "NL", "FR", "DE")] <- "Other"
+ks.proj$country <- as.factor(ks.proj$country)
+
+levels(ks.proj$country) # 5 levels
+sort(round(prop.table(table(ks.proj$country)),2))
+
+str(ks.proj)
+
+options(scipen = 5)
+ggplot(ks.proj, aes(x=duration, y=status,fill=status, size=10)) +
+  geom_boxplot() + 
+  geom_hline(yintercept = 0, color = "black")+
+  ylab("# of Projects") + xlab("Duration") +
+  ggtitle("Duration (days)") +
+  scale_fill_manual(values=c("#d8b365", "#5ab4ac"))
+ggplot(ks.proj, aes(x = status, y = duration, fill = ks.proj$status)) +
+  geom_boxplot() +
+  theme(legend.position = "bottom") +
+  coord_flip() +
+  xlab("") + ylab("Duration") +
+  ggtitle("Active Duration Project")+
+  scale_fill_manual(values=c("#d8b365", "#5ab4ac"))+
+  bbc_style()
+
+ggplot(ks.proj, aes(x = status, y = log(goal_usd), fill = ks.proj$status)) +
+  geom_boxplot() +
+  theme(legend.position = "bottom") +
+  ylab("Goal in USD (log-transformed)") + xlab("") +
+  scale_y_continuous(labels = scales::comma) +
+  coord_flip() + 
+  ggtitle(" Goal of Project")+
+  scale_fill_manual(values=c("#d8b365", "#5ab4ac")) +
+  labs(subtitle = "log(US Dollar)")+
+  bbc_style()
+
+ggplot(ks.proj, aes(log(goal_usd),  fill = ks.proj$status)) +
+  geom_density() +
+  theme(legend.position = "bottom") +
+  xlab("USD Goal (log-transformed)") + ylab("") +
+  ggtitle("KS projects' Goal")+ 
+  ggtitle(" Goal of Project")+
+  scale_fill_manual(values=c("#d8b365", "#5ab4ac")) +
+  labs(subtitle = "log(US Dollar)")+
+  bbc_style()
+
+ggplot(ks.proj, aes(x = main_category, fill = ks.proj$status)) +
+  geom_bar() +
+  coord_flip() +
+  theme(legend.position = "bottom") +
+  ylab("Number of projects") + xlab("") +
+  ggtitle("Main Categories")  +
+  scale_fill_manual(values=c("#d8b365", "#5ab4ac")) +
+  bbc_style()+
+  theme(axis.text.y = element_text(size=12))
+ks.proj %>% 
+  count(main_category) %>%
+  mutate(pct = n / sum(n)) %>%
+  ggplot(aes(reorder(main_category, pct), pct)) +
+  geom_density(size = 3) + scale_color_gradient() +
+  coord_flip() + 
+  ylab("% of projects") + xlab("") +
+  ggtitle("Main categories of the KS Projects ") +
+
+```
+
+b. Launched Year:
+
+```{r}
+
+ks.proj <- ks.proj %>% 
+  separate(col = "deadline", into = c("deadline_year", "deadline_month", "deadline_day"), sep = "-") %>%
+  separate(col = "launched_at", into = c("launched_year", "launched_month", "launched_day"), sep = "-")
+
+str(ks.proj)
+
+ggplot(ks.proj, aes(launched_year)) +
+  geom_bar(fill="#1380A1") +
+  ylab("# of Projects") + xlab("year launched") +
+  ggtitle("Initial Survey: Launched Year ")+
+  geom_hline(yintercept = 0, size = 1, colour="#333333") +
+  bbc_style() +
+  theme(axis.text.x = element_text(size=12))
+
+
+#levels(ks.proj$launched_year) # 10 levels
+#round(prop.table(table(ks.proj$launched_year)),2)
+## Reducing levels in Launched Year
+#ks.proj$launched_year <- as.character(ks.proj$launched_year)
+#ks.proj$launched_year[ks.proj$launched_year %in% c("2009", "2010", "2011")] <- #"Before 2012"
+#ks.proj$launched_year <- as.factor(ks.proj$launched_year)
+#
+#ggplot(ks.proj, aes(launched_year)) +
+#  geom_bar() +
+#  ylab("# of Projects") + xlab("year launched") +
+#  ggtitle("Post Survey: Launched year ")
+#
+
+```
+
+c. Currency:
+```{r}
+
+levels(ks.proj$currency)
+
+ggplot(ks.proj, aes(currency)) +
+  geom_bar() +
+  ylab("# of Projects") + xlab("currency type") +
+  ggtitle("Initial Survey: Currency ")
+
+
+
+
+sort(round(prop.table(table(ks.proj$currency)),2))
+# Reducing levels in Country
+ks.proj$currency <- as.character(ks.proj$currency)
+ks.proj$currency[ks.proj$currency %in% c("JPY", "HKD", "SGD", "CHF", "NOK", "DKK", "MXN", "NZD", 
+                                         "SEK")] <- "Other"
+ks.proj$currency <- as.factor(ks.proj$currency)
+
+ggplot(ks.proj, aes(currency)) +
+  geom_bar(fill="#1380A1") +
+  ylab("# of Projects") + xlab("currency type") +
+  ggtitle("Post Survey: Currency ") +
+  geom_hline(yintercept = 0, size = 1, colour="#333333") +
+  bbc_style() 
+
+
+str(ks.proj)
+
+```
+
+###Cluster analysis- Kickstarter Word type ################
+
+##clean fp_wording for fp_wording related to wording 
+```{r}
+fp_wording<-data[,c(-1:-12,-16:-20)]
+#View(fp_wording)
+str(fp_wording)
+
+fp_wording_clean<-fp_wording[,c(-3)]
+
+
+fp_wording_clean<-data.frame(scale(fp_wording_clean,center = T,scale = T))
+
+```
+
+
+#Plot (elbow method) to decide optimal number of clusters 
+```{r}
+set.seed(25)
+optim.cluster<-function(k){
+  return(kmeans(fp_wording_clean,k,nstart = 10)$tot.withinss)
+}
+k_values<-1:14
+oc_values<-purrr::map_dbl(k_values,optim.cluster)
+plot(x=k_values, y=oc_values,type="b",frame=F,xlab = "Number of clusters K",ylab="Total within-clusters (sum squared)")
+
+
+#### Option 1: K means_Clustering ####
+k_mean<-kmeans(fp_wording_clean, centers = 3, nstart = 10)
+k_mean
+k_mean$centers
+
+
+######Option 2: :K_means using Hartingan-Wong Method####
+
+##HW algorithm to find centroid 
+km_output1<-kmeans(fp_wording_clean,centers=3,nstart = 10,iter.max = 100,algorithm = "Hartigan-Wong")
+km_output1
+km_output1$centers
+
+
+
+clusplot(fp_wording_clean,km_output1$cluster,color=FALSE,shade=T,labels = 2,lines =0 )
+
+
+clusplot(fp_wording_clean,km_output1$cluster,color=TRUE,shade=T,labels = 1,lines =0 )
+
+
+
+
+km_df1<-data.frame(status=fp_wording$status,cluster1=km_output1$cluster)
+
+ggplot(km_df1)+
+  geom_polygon(aes(x=status,y=cluster1,group=status,fill=as.factor(cluster1)),color="red")+
+  coord_fixed(1.3)+
+  guides(fill=F)+
+  theme_bw()
+
+
+```
+
+
+##### 2nd Algorithm: HAC######
+```{r}
+
+hac_output<-hclust(dist(train3,method = "euclidean"),method = "average") #average
+hac_output2<-hclust(dist(train3,method = "euclidean"),method = "complete") #complete 
+
+
+#plot HAC 
+plot(hac_output) ##average 
+plot(hac_output2) ## complete 
+
+
+#output desirable number of clusters after modeling
+
+#average linkage
+hac_cut<-cutree(hac_output,4)
+hac_df1<-fp_wording.frame(author=fp_wording$author,cluster=hac_cut)
+avg_Clus_plot<-clusplot(fp_wording,hac_cut,color=TRUE,shade=T,labels = 2,lines =0 )
+
+#compelte linkage
+hac_cut<-cutree(hac_output2,4)
+hac_df1<-fp_wording.frame(author=fp_wording$author,cluster=hac_cut)
+clusplot(fp_wording,hac_cut,color=TRUE,shade=T,labels = 2,lines =0 )
+
+
+
+```
+
+####3rd Algorithm: EM#####
+```{r}
+
+#visualize clusters
+clPairs(fp_wording [1:30],fp_wording$author) ##disputed
+
+
+fit<-Mclust(fp_wording)
+summary(fit)
+
+#1. BIC (The Bayesian information criterion (BIC) 
+## is used my mclust with is a test used to assess the fit of a model)
+plot(fit,what= "BIC")
+#2. classification
+plot(fit, what = "classification")
+length(fit$classification)
+
+```
+
+
+# create Training - Test and Validation set (75 split) 
+
+```{r}
+split <- sample.split(ks.proj$status, SplitRatio = 0.75)
+```
+
+
+#get training and test data
+```{r}
+kicktrain <- subset(ks.proj, split == TRUE)
+kicktest <- subset(ks.proj, split == FALSE)
+#summary(logitmodel1) logitmodel1 Not found
+```
+
+#####1. Logistic Regression
+
+
+
+#  model selection 
+
+```{r}
+
+model.glm   <- glm(status ~ main_category + blurb_length + name_length, data = train.data, family = "binomial")
+#Error train.data not found
+summary(model.glm)
+
+
+```
+
+```{r}
+
+# Logistic Regression - Parameter Tuning
+# CV to choose cut-off probability
+searchgrid = seq(0.4, 0.7, 0.02)
+result = cbind(searchgrid, NA)
+cost1 <- function(r, pi) {
+  weight1 = 1
+  weight0 = 1
+  c1 = (r == 1) & (pi < pcut)  #logical vector - true if actual 1 but predict 0 (False Negative)
+  c0 = (r == 0) & (pi > pcut)  #logical vector - true if actual 0 but predict 1 (False Positive)
+  return(mean(weight1 * c1 + weight0 * c0))
+}
+
+for (i in 1:length(searchgrid)) {
+  pcut <- result[i, 1]
+  result[i, 2] <- cv.glm(data = train.data, glmfit = model.glm, cost = cost1, K = 3)$delta[2]
+}
+
+plot(result, ylab = "CV Cost",main = "Optimal cut-off probability identification")
+
+
+
+
+
+par(mfrow = c(1,2))
+# In-sample Prediction
+tree.predict.in <- predict(tree.model, train.data, type = "class")
+tree.pred.in <- predict(tree.model, train.data, type = "prob")
+confusionMatrix(train.data$status, tree.predict.in)
+
+
+roc.plot(train.data$status == "successful", pred.in, main = "In-sample ROC")$roc.vol
+
+# Model selection - Validation data
+pred.val <- predict(model.glm, newdata = validation.data, type = "response")
+prediction.val <- ifelse(pred.val < 0.64,0,1)
+table(as.factor(validation.data$status), prediction.val)
+roc.plot(validation.data$status == "successful", pred.val, main = "Validation ROC")$roc.vol
+
+
+
+```
+```{r}
+final.data <- data
+final.data$category <- as.factor(final.data$main_category)
+final.data$sub_category <- as.factor(final.data$sub_category)
+```
+
+
+Naive Bayes
+```{r}
+head(final.data,5)
+```
+
+Feature selection - NB
+```{r}
+nbDf <- final.data[,c("main_category","sub_category","duration","goal_usd",  "country","blurb_length","name_length","status","start_month", "end_month","usd_pledged")]
+
+nbDfSmall <- nbDf[randindex[1:1000],]
+```
+
+Create function to randomize index
+
+```{r}
+trainSplit <- function(df, seed){
+  set.seed(seed)
+  randindex <- sample(1:dim(df)[1],replace = FALSE)
+  return(randindex)
+}
+```
+
+Loop thru and create different models based on seed
+```{r}
+cutPt1_5 <- floor(dim(nbDf)[1]/5)
+x <- c(1001:1003)
+i <- 1001
+for(i in x) {
+  randindex <- trainSplit(nbDf,i )
+train <- nbDf[randindex[1:cutPt1_5],] #gets first 20% of rows based on randindex
+test <- nbDf[randindex[(cutPt1_5+1):dim(nbDf)[1]],]
+
+testLabel <- test$status
+test <- test[,-8]
+trainDT <- nbDf[randindex[1:cutPt1_5],] #gets first 20% of rows based on randindex
+testDT <- nbDf[randindex[(cutPt1_5+1):dim(nbDf)[1]],]
+
+testDT <- testDT[,-8]
+str(testLabel)
+#Naive Bayes
+nb_e1071 <- naiveBayes(status ~., data = train)
+nb_e1071_pred <- predict(nb_e1071, test)
+assign(paste("nb_e1071_pred.seed",i,sep="."),nb_e1071_pred)
+assign(paste("nb","tbl",i,sep="."),table(nb_e1071_pred, testLabel))
+head(nbDf)
+trainDT <- trainDT[,-11]
+testDT <- testDT[,-10]
+
+#SVM
+svm_fit <- svm(status ~ ., data = trainDT, kernel = "linear", cost = 1,scale = FALSE)
+pred_svm <- predict(svm_fit,testDT, type="class")
+assign(paste("svm","tbl",i,sep="."),table(pred_svm,testLabel))
+
+
+#Random Forest
+#Cannot handle more than 53 categories
+rfDFTrain <- trainDT[,-2]
+rfDFTrain <- rfDFTrain[,-10]
+
+rfDFTest <- testDT[-2]
+rfDFTest <- rfDFTest[-10]
+rf_fit <- randomForest(status ~ ., data = rfDFTrain)
+predRF <- predict(rf_fit, rfDFTest)
+assign(paste("rf","tbl",i,sep="."),table(predRF,testLabel))
+assign(paste("rf","ConfusionMatrix",i,sep="."),rf_fit$confusion)
+
+assign(paste("rf","hist",i,sep="."),hist(treesize(`Random Forest`)))
+
+ggplot(data=as.data.frame(treesize(`Random Forest`))) +
+  geom_histogram(binwidth = 100, colour="white" ,fill="#1380A1") +
+  aes(x=treesize(`Random Forest`))+
+  ylab("# of Trees") + xlab("Tree size") +
+  ggtitle("Tree size")+
+  labs(xlab = "test")+
+  bbc_style()
+
+'Random Forest' <- rf_fit
+head(treesize(`Random Forest`))
+
+str(rf_fit)
+
+rf_fit$confusion
+
+str(svm_fit)
+
+}
+```
+
+
+Confusion Matrix
+```{r}
+nb.tbl.1001
+nb.tbl.1002
+nb.tbl.1003
+svm.tbl.1001
+svm.tbl.1002
+svm.tbl.1003
+rf.tbl.1001
+rf.tbl.1002
+rf.tbl.1003
+```
+Accuracy rate
+```{r}
+sum(diag(nb.tbl.1001))/154039
+sum(diag(nb.tbl.1002))/154039
+sum(diag(nb.tbl.1003))/154039
+sum(diag(svm.tbl.1001))/154039
+sum(diag(svm.tbl.1002))/154039
+sum(diag(svm.tbl.1003))/154039
+sum(diag(rf.tbl.1001))/154039
+sum(diag(rf.tbl.1002))/154039
+sum(diag(rf.tbl.1003))/154039
+```
+
+
+
+```{r}
+ggplot(ks.proj, aes(x = status, y = log(goal_usd), fill = ks.proj$status)) +
+  geom_boxplot() +
+  theme(legend.position = "bottom") +
+  ylab("Goal in USD (log-transformed)") + xlab("") +
+  scale_y_continuous(labels = scales::comma) +
+  coord_flip() + 
+  ggtitle(" Goal of the KS projects (Log)")
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

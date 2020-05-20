@@ -1,0 +1,86 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Load csv and perform exploratory data analysis 
+
+```{r}
+getwd()
+file <- "CSVs\\Kickstarter.csv"
+convert(file, "kickstarter.json")
+eda <- read.csv(file)
+
+```
+Load libraries
+```{r}
+library(anytime)
+
+getwd()
+file <- "CSVs\\Kickstarter.csv"
+
+eda <- read.csv(file)
+
+eda2 <- eda
+eda2$source_url <- gsub("https://www.kickstarter.com/discover/categories/", "", eda2$source_url)
+eda2$source_url <- gsub("%20", " ", eda2$source_url)
+#print(eda2$source_url)
+Cat<-data.frame(do.call('rbind', strsplit(eda2$source_url, '/', fixed=TRUE)))
+eda2$MainCategory <- Cat$X1
+eda2$SubCategory <- Cat$X2
+eda2$created_at <- anytime(eda2$created_at)
+eda2$deadline <- anytime(eda2$deadline)
+eda2$launched_at <- anytime(eda2$launched_at)
+eda2$state_changed_at <- anytime(eda2$state_changed_at)
+#removed json columns -- couldn't figure out how to parse it as JSON
+drops <- c("category","creator","location","photo","profile","source-url","urls")
+eda2 <- eda2[,!names(eda2) %in% drops]
+# result is in time format
+eda2$campaignDurationDays <- round(difftime(eda2$deadline,eda2$launched_at, units = "days" ))
+head(eda2,5)
+
+
+head(eda,1)
+cat_raw <- as.JSON(eda$category)
+str(cat_raw)
+is.vector(cat_raw)
+
+data_raw <- jsonlite::fromJSON(eda$category)
+glimpse(data_raw, max.level = 3, list.len = 4)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+```{r}
+#import json
+tryjson <- fromJSON(txt="kickstarter.json")
+str(tryjson)
+```
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+```{r}
+eda2 <- eda
+eda2$source_url <- gsub("https://www.kickstarter.com/discover/categories/", "", eda2$source_url)
+eda2$source_url <- gsub("%20", " ", eda2$source_url)
+#print(eda2$source_url)
+Cat<-data.frame(do.call('rbind', strsplit(eda2$source_url, '/', fixed=TRUE)))
+eda2$MainCategory <- Cat$X1
+eda2$SubCategory <- Cat$X2
+eda2$created_at <- anytime(eda2$created_at)
+eda2$deadline <- anytime(eda2$deadline)
+eda2$launched_at <- anytime(eda2$launched_at)
+eda2$state_changed_at <- anytime(eda2$state_changed_at)
+#removed json columns -- couldn't figure out how to parse it as JSON
+drops <- c("category","creator","location","photo","profile","source-url","urls")
+eda2 <- eda2[,!names(eda2) %in% drops]
+# result is in time format
+eda2$campaignDurationDays <- round(difftime(eda2$deadline,eda2$launched_at, units = "days" ))
+head(eda2,5)
+
+```
+
+```{r}
+
+```
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
