@@ -9,7 +9,9 @@ The dataset contains 20 variables and over 192K observations and it is fairly la
 Based on preliminary examination of the dataset, following key questions should be addressed during the analysis.  These focal questions aim to diagnose potential factors that affect Kickstarter campaign effectiveness:
 
 ●	What demographics (if any) are most likely to succeed?
+
 ●	Which categories of product or service are more successful in funding their projects? 
+
 ●	Which is the most important factor effecting each campaign?
 
 While there are many potential variables that could be the cause of success or failure, our goal is to build a prediction model that would identify those major campaign success factors.
