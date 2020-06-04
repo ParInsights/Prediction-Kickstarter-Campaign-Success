@@ -17,3 +17,7 @@ Based on preliminary examination of the dataset, following key questions should 
 While there are many potential variables that could be the cause of success or failure, our goal is to build a prediction model that would identify those major campaign success factors.
 
 Methods of Analysis included creating a decison tree, descriptive statistics, svm, naive bayes, and random forest
+
+
+
+[Click Here To See The Final Report and Results](https://github.com/ParInsights/Prediction-Kickstarter-Campaign-Success/blob/master/Final_Project_Report.pdf)
